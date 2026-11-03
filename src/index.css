@@ -1,0 +1,352 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Smooth transition when switching themes */
+html {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Custom dark mode scrollbar */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #232d3f;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* ==========================================================================
+   Print-Specific Styles for Professional Physical Documents
+   ==========================================================================
+   Ensures that when a user prints a report from the browser, all charts,
+   tables, cards, and data visualizations are rendered with high contrast,
+   pure white paper background, exact ink colors, minimal page breaks,
+   and appropriate executive document headers and footers.
+   ========================================================================== */
+@media print {
+  @page {
+    size: auto;
+    margin: 1.2cm 1.2cm 1.5cm 1.2cm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #64748b;
+    }
+  }
+
+  /* Force exact color reproduction on physical paper */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Reset layout & backgrounds to crisp white document standard */
+  html,
+  body,
+  #root {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    color: #0f172a !important;
+    font-size: 10pt !important;
+    line-height: 1.35 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Neutralize dark mode for paper print */
+  .dark,
+  .dark body,
+  .dark #root {
+    background-color: #ffffff !important;
+    background-image: none !important;
+    color: #0f172a !important;
+    color-scheme: light !important;
+  }
+
+  .dark * {
+    border-color: #cbd5e1 !important;
+  }
+
+  /* Force crisp white card and container backgrounds */
+  .dark\:bg-slate-950,
+  .dark\:bg-slate-900,
+  .dark\:bg-slate-850,
+  .dark\:bg-slate-800,
+  .dark\:bg-slate-900\/80,
+  .dark\:bg-slate-900\/90,
+  .dark\:bg-slate-900\/40,
+  .bg-slate-900,
+  .bg-slate-950,
+  [class*="dark:bg-slate-"] {
+    background-color: #ffffff !important;
+    background-image: none !important;
+  }
+
+  /* Ensure card containers have clean high-contrast borders */
+  .border,
+  [class*="border-slate-"],
+  [class*="dark:border-slate-"] {
+    border-color: #cbd5e1 !important;
+  }
+
+  .bg-slate-50,
+  .bg-slate-100,
+  .bg-slate-200\/70,
+  .dark\:bg-slate-800\/60,
+  .dark\:bg-slate-800\/50,
+  .dark\:bg-slate-800\/40 {
+    background-color: #f8fafc !important;
+  }
+
+  /* Typography high-contrast optimization */
+  h1, h2, h3, h4, h5, h6 {
+    color: #0f172a !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  p, span, div, li, td, th {
+    color: #1e293b !important;
+  }
+
+  .text-slate-400,
+  .text-slate-500,
+  .dark\:text-slate-400,
+  .dark\:text-slate-500 {
+    color: #475569 !important;
+  }
+
+  /* Maintain distinct entity colors with high ink contrast */
+  .text-indigo-600,
+  .text-indigo-700,
+  .dark\:text-indigo-400,
+  .dark\:text-indigo-300 {
+    color: #3730a3 !important;
+  }
+
+  .text-emerald-600,
+  .text-emerald-700,
+  .dark\:text-emerald-400,
+  .dark\:text-emerald-300 {
+    color: #065f46 !important;
+  }
+
+  .bg-indigo-50,
+  .dark\:bg-indigo-950\/70,
+  .dark\:bg-indigo-950\/60,
+  .dark\:bg-indigo-950\/40,
+  .dark\:bg-indigo-950\/30 {
+    background-color: #eef2ff !important;
+  }
+
+  .bg-emerald-50,
+  .dark\:bg-emerald-950\/70,
+  .dark\:bg-emerald-950\/40,
+  .dark\:bg-emerald-950\/30 {
+    background-color: #ecfdf5 !important;
+  }
+
+  .bg-amber-50,
+  .dark\:bg-amber-950\/60,
+  .dark\:bg-amber-950\/50 {
+    background-color: #fffbeb !important;
+  }
+
+  /* Prevent page breaks inside critical report elements */
+  .rounded-xl,
+  .rounded-lg,
+  [id^="metric-card-"],
+  [id^="metric-category-card-"],
+  [id^="metric-row-"],
+  #entity-card-a,
+  #entity-card-b,
+  #comparison-hero-section,
+  #analytical-verdict-box,
+  #comparative-lead-scorecard-banner,
+  #metric-category-navigation-bar,
+  #historical-trajectory-card,
+  #variance-heatmap-card,
+  .recharts-responsive-container,
+  .recharts-wrapper,
+  svg,
+  canvas,
+  table,
+  tr,
+  figure,
+  blockquote,
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Chart SVG high-contrast adjustments for ink printing */
+  svg text {
+    fill: #1e293b !important;
+    font-size: 8pt !important;
+  }
+
+  .recharts-cartesian-grid line {
+    stroke: #e2e8f0 !important;
+    stroke-opacity: 0.8 !important;
+  }
+
+  .recharts-cartesian-axis-line {
+    stroke: #94a3b8 !important;
+  }
+
+  .recharts-cartesian-axis-tick-line {
+    stroke: #94a3b8 !important;
+  }
+
+  /* SVG line chart print overrides - disable animation & stroke offset on physical paper */
+  .historical-path-line-a,
+  .historical-path-line-b,
+  .historical-path-line-c {
+    stroke-dashoffset: 0 !important;
+    animation: none !important;
+  }
+
+  .historical-area-fill,
+  .historical-node-dot {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  #historical-chart-floating-tooltip {
+    display: none !important;
+  }
+
+  /* Table-specific print formatting */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    break-inside: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+    break-inside: avoid !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+    break-inside: avoid !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  th, td {
+    padding: 6pt 8pt !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+
+  /* Keep category headers in grouped table view */
+  [id^="metric-group-"] > button {
+    display: flex !important;
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    padding: 8pt 12pt !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    cursor: default !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  [id^="metric-group-"] > button svg {
+    display: none !important;
+  }
+
+  /* Prevent overflow clipping in print */
+  .overflow-hidden,
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .no-scrollbar {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  /* Remove sticky and fixed positioning for flat print layout */
+  .sticky,
+  .fixed:not(#export-modal-backdrop) {
+    position: static !important;
+  }
+
+  /* Hide interactive, screen-only UI elements when printing */
+  nav,
+  header#app-header,
+  #dark-mode-toggle-btn,
+  #floating-recent-comparisons-btn,
+  #change-entity-a-btn,
+  #change-entity-b-btn,
+  #swap-entities-btn,
+  #open-multi-entity-hero-btn,
+  #customize-indicators-hero-btn,
+  #comparison-view-mode-switcher,
+  #toggle-inline-indicator-selector-btn,
+  #inline-indicator-selector-panel,
+  #currency-switcher-control,
+  #download-as-csv-btn,
+  #download-csv-footer-btn,
+  #toggle-group-by-category-btn,
+  #expand-all-categories-btn,
+  #collapse-all-categories-btn,
+  #cat-tab-all,
+  [id^="cat-tab-"],
+  #curated-matchup-ribbon,
+  #section-nav-tabs,
+  #download-chart-image-btn,
+  #download-history-csv-btn,
+  #add-benchmark-overlay-btn,
+  #time-range-switcher,
+  #chart-metric-selector,
+  input,
+  select,
+  kbd,
+  .no-print,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Hide action buttons except grouped category accordion headers */
+  button:not([id^="metric-group-"] > button) {
+    display: none !important;
+  }
+
+  /* If printing from inside ExportSummaryModal */
+  #export-modal-backdrop {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  #export-summary-modal {
+    max-height: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "GDP & Economic Indicator Comparator",
+  "description": "Compare GDP, growth rates, per capita wealth, and macroeconomic indicators between countries and subnational regions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
