@@ -14,7 +14,10 @@ import {
 import { CURATED_COMPARISONS } from '../data/economicData';
 import { CuratedComparison, EconomicEntity } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 import { GlobalEntitySearchBar } from './GlobalEntitySearchBar';
+import { LanguageSelector } from './LanguageSelector';
+import { ThemeToggle } from './ThemeToggle';
 
 interface NavbarProps {
   onSelectCurated: (comparison: CuratedComparison) => void;
@@ -52,6 +55,7 @@ export function Navbar({
   onOpenForexConverter,
 }: NavbarProps) {
   const { isDarkMode, toggleTheme } = useTheme();
+  const { t } = useLanguage();
 
   return (
     <header id="app-header" className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-2xs transition-colors">
@@ -67,14 +71,14 @@ export function Navbar({
             <div>
               <div className="flex items-center space-x-2">
                 <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                  GDP & Macro Comparator
+                  {t('appTitle')}
                 </h1>
                 <span className="hidden xl:inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                  Nations & Regions
+                  {t('tagNationsAndRegions')}
                 </span>
               </div>
               <p className="text-3xs text-slate-500 dark:text-slate-400 hidden lg:block">
-                Benchmarking sovereign countries and subnational economies
+                {t('appSubtitle')}
               </p>
             </div>
           </div>
@@ -93,6 +97,9 @@ export function Navbar({
 
           {/* Right Action Buttons */}
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            {/* 9-Language Selector Dropdown */}
+            <LanguageSelector />
+
             {/* Real-Time Currency Converter Button */}
             {onOpenForexConverter && (
               <button
@@ -102,30 +109,12 @@ export function Navbar({
                 title="Open Real-Time Currency Converter (Live FX Rates)"
               >
                 <Coins className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform" />
-                <span className="hidden sm:inline">Live FX</span>
+                <span className="hidden sm:inline">{t('liveFxButton')}</span>
               </button>
             )}
 
-            {/* Global Dark Mode Toggle */}
-            <button
-              id="dark-mode-toggle-btn"
-              onClick={toggleTheme}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/90 hover:dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center space-x-1.5 transition-colors shadow-2xs cursor-pointer"
-              title={isDarkMode ? 'Switch to Light Mode (Press D)' : 'Switch to Dark Mode (Press D)'}
-              aria-label="Toggle dark mode"
-            >
-              {isDarkMode ? (
-                <Sun className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Moon className="w-4 h-4 text-slate-600" />
-              )}
-              <span className="hidden md:inline">
-                {isDarkMode ? 'Dark' : 'Light'}
-              </span>
-              <kbd className="hidden lg:inline-block px-1 py-0.2 text-[9px] font-mono bg-white/70 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 ml-0.5">
-                D
-              </kbd>
-            </button>
+            {/* User-Facing Dynamic Theme Toggle (Light / Dark Mode) */}
+            <ThemeToggle />
 
             {/* Indicators Customizer Button */}
             {onOpenIndicators && (
@@ -136,7 +125,7 @@ export function Navbar({
                 title="Select or deselect economic indicators (Press I)"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:rotate-45 transition-transform" />
-                <span className="hidden sm:inline">Indicators</span>
+                <span className="hidden sm:inline">{t('indicatorsButton')}</span>
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-200 border border-indigo-200/60 dark:border-indigo-800">
                   {activeIndicatorCount}/{totalIndicatorCount}
                 </span>
@@ -155,7 +144,7 @@ export function Navbar({
                 title="Open 5-Way Multi-Entity Aggregate Comparison (Press M)"
               >
                 <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
-                <span className="hidden sm:inline">5-Way Lab</span>
+                <span className="hidden sm:inline">{t('fiveWayLab')}</span>
                 <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-200/80 dark:bg-indigo-900 text-indigo-900 dark:text-indigo-200">
                   5
                 </span>
@@ -173,7 +162,7 @@ export function Navbar({
               title="View recent comparison sessions (Press H)"
             >
               <History className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:rotate-[-20deg] transition-transform" />
-              <span className="hidden sm:inline">Recent</span>
+              <span className="hidden sm:inline">{t('recentSessions')}</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-200/80 dark:bg-indigo-900/70 text-indigo-900 dark:text-indigo-200 ml-0.5">
                 {recentCount}
               </span>
@@ -188,7 +177,7 @@ export function Navbar({
               className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100/80 hover:dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 flex items-center space-x-1.5 transition-colors shadow-2xs cursor-pointer"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="hidden sm:inline">Sheets</span>
+              <span className="hidden sm:inline">{t('googleSheets')}</span>
             </button>
 
             <button
@@ -197,7 +186,7 @@ export function Navbar({
               className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 hover:dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center space-x-1.5 transition-colors shadow-2xs cursor-pointer"
             >
               <FileDown className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-              <span className="hidden sm:inline">Export</span>
+              <span className="hidden sm:inline">{t('exportReport')}</span>
             </button>
 
             {/* Print Document Button */}

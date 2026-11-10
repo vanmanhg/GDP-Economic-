@@ -10,7 +10,7 @@ export interface ExtendedHistoricalPoint {
   publicDebtToGdp: number; // % of GDP
 }
 
-export type HistoricalTimeRange = '5y' | '10y' | '15y' | '20y' | 'all';
+export type HistoricalTimeRange = '5y' | '10y' | '15y' | '20y' | 'all' | 'custom';
 
 export type { HistoricalMetricKey };
 
@@ -261,12 +261,21 @@ export function getExtendedHistory(entity: EconomicEntity): ExtendedHistoricalPo
 }
 
 /**
- * Filter points by time range: 5y (2020-2024), 10y (2015-2024), 15y (2010-2024), 20y (2005-2024)
+ * Filter points by time range: 5y (2020-2024), 10y (2015-2024), 15y (2010-2024), 20y (2005-2024), or custom (startYear-endYear)
  */
 export function filterHistoryByRange(
   points: ExtendedHistoricalPoint[],
-  range: HistoricalTimeRange
+  range: HistoricalTimeRange,
+  customStartYear?: number,
+  customEndYear?: number
 ): ExtendedHistoricalPoint[] {
+  if (range === 'custom') {
+    const start = customStartYear ?? 2015;
+    const end = customEndYear ?? 2024;
+    const min = Math.min(start, end);
+    const max = Math.max(start, end);
+    return points.filter((p) => p.year >= min && p.year <= max);
+  }
   if (range === '5y') {
     return points.filter((p) => p.year >= 2020);
   }

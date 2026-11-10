@@ -45,6 +45,10 @@ export function useMacroSpeech() {
     macroSpeech.previousSentence();
   }, []);
 
+  const speakNotification = useCallback((text: string, lang?: string) => {
+    macroSpeech.speakQuickNotification(text, lang);
+  }, []);
+
   return {
     ...speechState,
     playAnalysis,
@@ -55,5 +59,6 @@ export function useMacroSpeech() {
     setVoice,
     nextSentence,
     previousSentence,
+    speakNotification,
   };
 }

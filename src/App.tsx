@@ -25,13 +25,18 @@ import { GrowthProjectionLab } from './components/GrowthProjectionLab';
 import { CountrySpotlight } from './components/CountrySpotlight';
 import { MacroAnalystCopilot } from './components/MacroAnalystCopilot';
 import { InteractiveEconomicCharts } from './components/InteractiveEconomicCharts';
+import { EconomicWorldMap } from './components/EconomicWorldMap';
 import { DEFAULT_SELECTED_INDICATOR_IDS, ALL_INDICATORS } from './data/indicatorsRegistry';
-import { BarChart2, BarChart3, Grid3X3, TrendingUp, Layers, Compass, Calculator, MapPin, Scale, History, SlidersHorizontal, Users, Sparkles, Globe2, Sliders, BrainCircuit } from 'lucide-react';
+import { BarChart2, BarChart3, Grid3X3, TrendingUp, Layers, Compass, Calculator, MapPin, Scale, History, SlidersHorizontal, Users, Sparkles, Globe, Globe2, Sliders, BrainCircuit, Zap, X } from 'lucide-react';
+import { HistoricalTimeRange } from './data/historicalExtendedData';
+import { SnapshotVoiceCommandResult, getTabDisplayName } from './utils/voiceSnapshotParser';
+import { useLanguage } from './context/LanguageContext';
 
 const STORAGE_KEY = 'gdp_comparator_recent_comparisons_v1';
 const INDICATORS_STORAGE_KEY = 'gdp_comparator_selected_indicators_v1';
 
 export default function App() {
+  const { t } = useLanguage();
   // Default to California vs United Kingdom (classic region vs nation comparison)
   const [entityA, setEntityA] = useState<EconomicEntity>(
     () => getEntityById('us-ca') || ECONOMIC_ENTITIES[0]
@@ -46,10 +51,34 @@ export default function App() {
   const [isSheetsOpen, setIsSheetsOpen] = useState(false);
   const [isRecentOpen, setIsRecentOpen] = useState(false);
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'charts' | 'trends' | 'copilot' | 'fiscal' | 'what-if' | 'heatmap' | 'history' | 'projection' | 'sectors' | 'radar' | 'equivalence'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'world-map' | 'charts' | 'trends' | 'copilot' | 'fiscal' | 'what-if' | 'heatmap' | 'history' | 'projection' | 'sectors' | 'radar' | 'equivalence'>('overview');
 
   const [activeCuratedId, setActiveCuratedId] = useState<string | undefined>('ca-vs-gb');
   const [sharedHoveredYear, setSharedHoveredYear] = useState<number | null>(null);
+
+  // Active time range for interactive trend charts (e.g. '5y' when requested by voice snapshot command)
+  const [chartTimeRange, setChartTimeRange] = useState<HistoricalTimeRange>('10y');
+
+  // Floating notification when a natural language Voice Snapshot command is executed
+  const [snapshotNotification, setSnapshotNotification] = useState<SnapshotVoiceCommandResult | null>(null);
+
+  // Auto-apply natural language Snapshot commands from Macro Analyst Copilot (Voice or Quick Command)
+  const handleApplySnapshotCommand = useCallback((snapshot: SnapshotVoiceCommandResult) => {
+    setEntityA(snapshot.entityA);
+    setEntityB(snapshot.entityB);
+    if (snapshot.targetTimeRange) {
+      setChartTimeRange(snapshot.targetTimeRange);
+    }
+    setActiveTab(snapshot.targetTab);
+    setActiveCuratedId(undefined);
+    setSnapshotNotification(snapshot);
+
+    // Auto-dismiss notification after 8 seconds
+    const notificationId = snapshot.rawText;
+    setTimeout(() => {
+      setSnapshotNotification((prev) => (prev?.rawText === notificationId ? null : prev));
+    }, 8000);
+  }, []);
 
   // Load and manage last 5 recent comparisons from localStorage
   const [recentComparisons, setRecentComparisons] = useState<RecentComparisonItem[]>(() => {
@@ -333,6 +362,61 @@ export default function App() {
           onOpenIndicatorSelector={() => setIsIndicatorModalOpen(true)}
         />
 
+        {/* Natural Language Voice Snapshot Executed Notification Toast/Banner */}
+        {snapshotNotification && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 print:hidden animate-fadeIn">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 text-white border border-indigo-500/40 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center space-x-3.5">
+                <div className="p-2.5 rounded-xl bg-indigo-500/20 border border-indigo-400/40 text-amber-300 shrink-0">
+                  <Zap className="w-5 h-5 fill-amber-300" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500 text-white shadow-2xs">
+                      ⚡ Voice Snapshot Executed
+                    </span>
+                    <span className="text-xs text-indigo-200">
+                      Lệnh giọng nói: <strong className="text-white font-mono bg-white/10 px-2 py-0.5 rounded">"{snapshotNotification.rawText}"</strong>
+                    </span>
+                  </div>
+                  <div className="text-sm sm:text-base font-bold text-white mt-1.5 flex items-center space-x-2 flex-wrap">
+                    <span>
+                      Đang so sánh {snapshotNotification.entityA.name} {snapshotNotification.entityA.flag} và {snapshotNotification.entityB.name} {snapshotNotification.entityB.flag}
+                    </span>
+                    {snapshotNotification.targetTimeRange && (
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/40 border border-indigo-400/30 text-indigo-200 font-mono text-xs">
+                        {snapshotNotification.targetTimeRange === '5y' ? '5 Năm gần nhất' : snapshotNotification.targetTimeRange}
+                      </span>
+                    )}
+                    <span className="text-xs text-indigo-300 font-normal">
+                      → Tự động chuyển đến tab <strong className="text-white underline decoration-indigo-400">{getTabDisplayName(snapshotNotification.targetTab).vi}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 shrink-0 self-end md:self-auto">
+                {activeTab !== 'copilot' && (
+                  <button
+                    onClick={() => setActiveTab('copilot')}
+                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition-colors flex items-center space-x-1 cursor-pointer border border-white/15"
+                  >
+                    <BrainCircuit className="w-3.5 h-3.5 text-indigo-300" />
+                    <span>Mở Copilot</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setSnapshotNotification(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Đóng thông báo"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Section Navigation Tabs (Screen only, hidden in print) */}
         <div id="section-nav-tabs" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 print:hidden">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3 flex-wrap gap-2">
@@ -347,7 +431,23 @@ export default function App() {
                 }`}
               >
                 <BarChart3 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Indicators & Specs</span>
+                <span>{t('tabOverview')}</span>
+              </button>
+
+              <button
+                id="tab-world-map"
+                onClick={() => setActiveTab('world-map')}
+                className={`px-3 py-1.5 rounded-lg font-semibold flex items-center space-x-1.5 transition-all cursor-pointer ${
+                  activeTab === 'world-map'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                <span>{t('tabWorldMap')}</span>
+                <span className="hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-cyan-100 dark:bg-cyan-900/60 text-cyan-800 dark:text-cyan-300">
+                  Choropleth
+                </span>
               </button>
 
               <button
@@ -360,9 +460,9 @@ export default function App() {
                 }`}
               >
                 <BarChart2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Biểu đồ Tương tác</span>
+                <span>{t('tabCharts')}</span>
                 <span className="hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300">
-                  Line & Bar
+                  Line, Bar & Pie
                 </span>
               </button>
 
@@ -376,7 +476,7 @@ export default function App() {
                 }`}
               >
                 <Globe2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span>Macro Trends</span>
+                <span>{t('tabTrends')}</span>
                 <span className="hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
                   Search
                 </span>
@@ -392,7 +492,7 @@ export default function App() {
                 }`}
               >
                 <Scale className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Fiscal Policy AI</span>
+                <span>{t('tabFiscal')}</span>
               </button>
 
               <button
@@ -405,7 +505,7 @@ export default function App() {
                 }`}
               >
                 <BrainCircuit className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
-                <span>AI Copilot</span>
+                <span>{t('tabCopilot')}</span>
                 <span className="hidden sm:inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-violet-100 dark:bg-violet-900/60 text-violet-800 dark:text-violet-300">
                   Stress Test
                 </span>
@@ -421,7 +521,7 @@ export default function App() {
                 }`}
               >
                 <Sliders className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
-                <span>What-If Scenario</span>
+                <span>{t('tabWhatIf')}</span>
               </button>
 
               <button
@@ -434,7 +534,7 @@ export default function App() {
                 }`}
               >
                 <Grid3X3 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Variance Heatmap</span>
+                <span>{t('tabHeatmap')}</span>
               </button>
 
               <button
@@ -447,7 +547,7 @@ export default function App() {
                 }`}
               >
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Historical Trends (20Y)</span>
+                <span>{t('tabHistory')}</span>
               </button>
 
               <button
@@ -460,7 +560,7 @@ export default function App() {
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Growth Projection</span>
+                <span>{t('tabProjection')}</span>
               </button>
 
               <button
@@ -473,7 +573,7 @@ export default function App() {
                 }`}
               >
                 <Layers className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span>Sectors & Composition</span>
+                <span>{t('tabSectors')}</span>
               </button>
 
               <button
@@ -486,7 +586,7 @@ export default function App() {
                 }`}
               >
                 <Compass className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Radar Profile</span>
+                <span>{t('tabRadar')}</span>
               </button>
 
               <button
@@ -499,7 +599,7 @@ export default function App() {
                 }`}
               >
                 <Calculator className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-                <span>Equivalence Lab</span>
+                <span>{t('tabEquivalence')}</span>
               </button>
             </div>
 
@@ -553,6 +653,7 @@ export default function App() {
                 <InteractiveEconomicCharts
                   entityA={entityA}
                   entityB={entityB}
+                  initialTimeRange={chartTimeRange}
                   onSelectEntity={handleSelectEntity}
                 />
 
@@ -579,11 +680,30 @@ export default function App() {
               </>
             )}
 
+            {activeTab === 'world-map' && (
+              <div className="space-y-6">
+                <EconomicWorldMap
+                  entityA={entityA}
+                  entityB={entityB}
+                  onSelectEntityA={(ent) => {
+                    setEntityA(ent);
+                    setActiveCuratedId(undefined);
+                  }}
+                  onSelectEntityB={(ent) => {
+                    setEntityB(ent);
+                    setActiveCuratedId(undefined);
+                  }}
+                  onJumpToTab={(tab) => setActiveTab(tab as any)}
+                />
+              </div>
+            )}
+
             {activeTab === 'charts' && (
               <div className="space-y-6">
                 <InteractiveEconomicCharts
                   entityA={entityA}
                   entityB={entityB}
+                  initialTimeRange={chartTimeRange}
                   onSelectEntity={handleSelectEntity}
                 />
                 <MetricComparisonTable
@@ -624,7 +744,11 @@ export default function App() {
 
             {activeTab === 'copilot' && (
               <div className="space-y-6">
-                <MacroAnalystCopilot entityA={entityA} entityB={entityB} />
+                <MacroAnalystCopilot
+                  entityA={entityA}
+                  entityB={entityB}
+                  onApplySnapshotCommand={handleApplySnapshotCommand}
+                />
               </div>
             )}
 

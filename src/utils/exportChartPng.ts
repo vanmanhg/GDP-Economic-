@@ -166,9 +166,13 @@ export async function downloadHistoricalChartPng(
       ? '5-Year (2020–2024)'
       : timeRange === '10y'
       ? '10-Year (2015–2024)'
-      : timeRange === '20y'
+      : timeRange === '15y'
+      ? '15-Year (2010–2024)'
+      : timeRange === '20y' || timeRange === 'all'
       ? '20-Year (2005–2024)'
-      : 'Full Historical Horizon';
+      : stats
+      ? `Custom (${stats.startYear}–${stats.endYear})`
+      : 'Custom Historical Horizon';
   ctx.fillStyle = textSecondary;
   ctx.font = '500 20px system-ui, -apple-system, sans-serif';
   ctx.fillText(

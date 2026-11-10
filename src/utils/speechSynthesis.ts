@@ -362,6 +362,38 @@ class MacroSpeechController {
     this.currentIndex = Math.max(0, this.currentIndex - 1);
     this.speakCurrentSentence();
   }
+
+  /**
+   * Speaks a quick auditory confirmation message (e.g. for voice snapshot commands)
+   */
+  public speakQuickNotification(text: string, lang?: string) {
+    if (!this.isSupported() || !text) return;
+    try {
+      this.stop();
+      const utterance = new SpeechSynthesisUtterance(cleanTextForSpeech(text));
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+
+      if (lang) {
+        utterance.lang = lang;
+        const availableVoices = this.getVoices();
+        const matchingVoice = availableVoices.find(
+          (v: SpeechSynthesisVoice) =>
+            v.lang.toLowerCase() === lang.toLowerCase() ||
+            v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase())
+        );
+        if (matchingVoice) {
+          utterance.voice = matchingVoice;
+        }
+      } else if (this.selectedVoice) {
+        utterance.voice = this.selectedVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('Failed to speak quick notification', e);
+    }
+  }
 }
 
 // Global singleton instance for audio playback across the application

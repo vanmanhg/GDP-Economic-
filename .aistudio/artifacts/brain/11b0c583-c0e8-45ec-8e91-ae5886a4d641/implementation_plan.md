@@ -189,3 +189,30 @@ export interface CopilotAnalysisResult {
 1. **Interactive Verification**: Test selecting different pairs (e.g., California vs United Kingdom, Texas vs Germany, Japan vs United States), running presets, and submitting custom freeform prompts.
 2. **Grounding Verification**: Ensure responses accurately reflect whether an entity is a subnational state (cannot issue fiat currency, must balance budget) versus a sovereign nation.
 3. **Compilation & Responsiveness**: Run `lint_applet` (`tsc --noEmit`) and `compile_applet` (`vite build`) to confirm clean TypeScript compilation with zero lint warnings.
+
+---
+
+## 4. Chat History & Analysis Export Extension
+
+### Implemented Capabilities
+- **Download Chat History**: Dropdown and quick export action bar embedded into the Macro Analyst Copilot tab header and individual intelligence dossiers.
+- **Dual Export Formats**:
+  - **Markdown (.md)**: Full dossier with executive thesis, transmission channels, asymmetric vulnerabilities, policy recommendations, indicator projections, and Macro Confidence scores.
+  - **Structured JSON (.json)**: Complete programmatic export with session metadata, entity figures, sentiment pillars, discussed indicator keys, and raw analysis payloads.
+- **Convenient UI Feedback**: Auto-closing dropdown on outside click, animated notification toast confirming download filename, and disabled states when no chat history exists.
+
+---
+
+## 5. Economic World Map (D3 Choropleth)
+
+### Implemented Capabilities
+- **D3 Choropleth Map Engine**:
+  - Offline-first TopoJSON topology covering 177 sovereign nations with Natural Earth spherical projection (`d3.geoNaturalEarth1`).
+  - Interactive logarithmic and sequential color scaling calibrated to avoid wealth-distribution crushing.
+  - Interactive multi-metric toggles: Nominal GDP per Capita, PPP GDP per Capita, Total Nominal GDP ($B), Real Growth Rate (%), Inflation Rate (CPI), and Public Debt-to-GDP.
+  - Geographic focus presets for Europe, Asia-Pacific, and the Americas, alongside fluid mouse-drag pan and zoom controls (+ / - / Reset).
+- **Tooltips & Entity Linkage**:
+  - Hover tooltip featuring flag, country name, continent, active metric value, nominal GDP, population, growth rate, and comparison slot indicator.
+  - Active comparison indicators for Entity A (indigo glow) and Entity B (emerald glow) on the global map.
+  - Detailed Country Dossier card on selection with 6-indicator telemetry grid, leading economic engines, and 1-click "Set as Entity A" / "Set as Entity B" adoption handlers.
+  - Sortable Global Leaderboard directory with search filter and continent filtering.

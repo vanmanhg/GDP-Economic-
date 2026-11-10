@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import {
   BrainCircuit,
   Sparkles,
@@ -28,6 +28,10 @@ import {
   Mic,
   MicOff,
   Languages,
+  Download,
+  FileText,
+  FileJson,
+  ChevronDown,
 } from 'lucide-react';
 import {
   EconomicEntity,
@@ -37,8 +41,10 @@ import {
   CopilotChatMessage,
 } from '../types';
 import { COPILOT_SCENARIO_PRESETS, QUICK_PROMPT_SUGGESTIONS } from '../data/copilotPresets';
+import { ECONOMIC_ENTITIES } from '../data/economicData';
 import { MacroMiniSparkline } from './MacroMiniSparkline';
 import { MacroSentimentGauge } from './MacroSentimentGauge';
+import { EconomicRiskMonitor } from './EconomicRiskMonitor';
 import {
   detectDiscussedIndicators,
   parseParagraphWithIndicators,
@@ -46,13 +52,23 @@ import {
 import { HistoricalMetricKey, HISTORICAL_METRIC_SPECS } from '../data/historicalExtendedData';
 import { useMacroSpeech } from '../hooks/useMacroSpeech';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import {
+  parseVoiceSnapshotCommand,
+  SNAPSHOT_VOICE_EXAMPLES,
+  SnapshotVoiceCommandResult,
+  getTabDisplayName,
+} from '../utils/voiceSnapshotParser';
+import { downloadChatHistory } from '../utils/exportChatHistory';
+import { useLanguage } from '../context/LanguageContext';
 
 interface MacroAnalystCopilotProps {
   entityA: EconomicEntity;
   entityB: EconomicEntity;
+  onApplySnapshotCommand?: (snapshot: SnapshotVoiceCommandResult) => void;
 }
 
-export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotProps) {
+export function MacroAnalystCopilot({ entityA, entityB, onApplySnapshotCommand }: MacroAnalystCopilotProps) {
+  const { currentLanguage, t } = useLanguage();
   const [selectedPresetId, setSelectedPresetId] = useState<string>('stagflation-energy');
   const [customQuery, setCustomQuery] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -62,6 +78,26 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
   // Chat message history
   const [messages, setMessages] = useState<CopilotChatMessage[]>([]);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  // Export Chat History state
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState<boolean>(false);
+  const [downloadSuccessToast, setDownloadSuccessToast] = useState<string | null>(null);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    if (isExportMenuOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isExportMenuOpen]);
 
   // Active highlighted indicator (if clicked from inline sparkline)
   const [focusedMetric, setFocusedMetric] = useState<HistoricalMetricKey | null>(null);
@@ -81,6 +117,7 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
     resume: resumeSpeech,
     stop: stopSpeech,
     setRate: setSpeechRate,
+    speakNotification,
   } = useMacroSpeech();
 
   // Stop speech when component unmounts
@@ -91,8 +128,61 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
   }, [stopSpeech]);
 
   // Web Speech API hook for Speech Recognition (Microphone voice input)
-  const [speechInputLang, setSpeechInputLang] = useState<'vi-VN' | 'en-US'>('vi-VN');
+  const [speechInputLang, setSpeechInputLang] = useState<string>(currentLanguage.speechCode);
+
+  useEffect(() => {
+    setSpeechInputLang(currentLanguage.speechCode);
+  }, [currentLanguage.speechCode]);
   const baseQueryBeforeSpeechRef = useRef<string>('');
+
+  // Real-time detection of Snapshot commands in current input text
+  const liveSnapshot = useMemo(() => {
+    if (!customQuery || customQuery.trim().length < 4) return null;
+    return parseVoiceSnapshotCommand(customQuery, ECONOMIC_ENTITIES, entityA, entityB);
+  }, [customQuery, entityA, entityB]);
+
+  // Execute a recognized Voice Snapshot command: updates entities, jumps to tab, and speaks audio confirmation
+  const handleExecuteSnapshot = useCallback(
+    (snapshotCmd: SnapshotVoiceCommandResult) => {
+      stopSpeech();
+
+      // Speak auditory confirmation
+      speakNotification(snapshotCmd.spokenFeedback, speechInputLang);
+
+      // Append confirmation card to conversation history
+      const userMsg: CopilotChatMessage = {
+        id: `user-${Date.now()}`,
+        sender: 'user',
+        text: snapshotCmd.rawText,
+        scenarioTitle: 'Voice Snapshot Command',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      const asstMsg: CopilotChatMessage = {
+        id: `snapshot-${Date.now()}`,
+        sender: 'assistant',
+        text: `⚡ **Lệnh Snapshot bằng giọng nói đã được thực thi thành công!**\n\n- **Thực thể so sánh:** ${snapshotCmd.entityA.name} ${snapshotCmd.entityA.flag} vs ${snapshotCmd.entityB.name} ${snapshotCmd.entityB.flag}\n- **Khung thời gian:** ${
+          snapshotCmd.targetTimeRange === '5y'
+            ? '5 năm gần nhất'
+            : snapshotCmd.targetTimeRange === '10y'
+            ? '10 năm qua'
+            : snapshotCmd.targetTimeRange === '20y'
+            ? '20 năm lịch sử'
+            : snapshotCmd.targetTimeRange || 'Toàn bộ'
+        }\n- **Tab điều hướng:** ${getTabDisplayName(snapshotCmd.targetTab).vi} (${getTabDisplayName(snapshotCmd.targetTab).en})\n\nỨng dụng đã tự động chọn hai thực thể kinh tế và chuyển hướng đến giao diện tương ứng.`,
+        scenarioTitle: `Snapshot: ${snapshotCmd.entityA.shortName} vs ${snapshotCmd.entityB.shortName}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setMessages((prev) => [...prev, userMsg, asstMsg]);
+      setCustomQuery('');
+
+      if (onApplySnapshotCommand) {
+        onApplySnapshotCommand(snapshotCmd);
+      }
+    },
+    [stopSpeech, speakNotification, speechInputLang, onApplySnapshotCommand]
+  );
 
   const {
     isSupported: isSpeechRecSupported,
@@ -108,7 +198,15 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
     },
     onFinalResult: (finalText) => {
       const base = baseQueryBeforeSpeechRef.current;
-      setCustomQuery(base ? `${base} ${finalText}` : finalText);
+      const combined = (base ? `${base} ${finalText}` : finalText).trim();
+      setCustomQuery(combined);
+
+      // Check if voice transcript matches a Snapshot command!
+      const snapshotCmd = parseVoiceSnapshotCommand(combined, ECONOMIC_ENTITIES, entityA, entityB);
+      if (snapshotCmd) {
+        stopListening();
+        handleExecuteSnapshot(snapshotCmd);
+      }
     },
   });
 
@@ -210,6 +308,29 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
     [entityA, entityB, customQuery, selectedPresetId]
   );
 
+  // Process query: checks if input is a natural language Voice Snapshot command or standard analytical prompt
+  const handleProcessQuery = useCallback(
+    (queryToProcess?: string) => {
+      const query = (queryToProcess !== undefined ? queryToProcess : customQuery).trim();
+      if (!query) return;
+
+      if (isListening) {
+        stopListening();
+      }
+
+      // Check if command matches a Voice Snapshot command
+      const snapshotCmd = parseVoiceSnapshotCommand(query, ECONOMIC_ENTITIES, entityA, entityB);
+      if (snapshotCmd) {
+        handleExecuteSnapshot(snapshotCmd);
+        return;
+      }
+
+      // Otherwise standard copilot analytical prompt
+      runAnalysis(query);
+    },
+    [customQuery, isListening, stopListening, entityA, entityB, handleExecuteSnapshot, runAnalysis]
+  );
+
   // Initialize with default preset on mount or entity change
   useEffect(() => {
     stopSpeech();
@@ -235,6 +356,19 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
     setSelectedPresetId('');
     runAnalysis(prompt, undefined);
   };
+
+  const handleLaunchPromptFromRiskMonitor = useCallback(
+    (prompt: string) => {
+      stopSpeech();
+      setSelectedPresetId('');
+      setCustomQuery(prompt);
+      runAnalysis(prompt, undefined);
+      setTimeout(() => {
+        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    },
+    [stopSpeech, runAnalysis]
+  );
 
   const handleCopyMessage = (msg: CopilotChatMessage) => {
     if (!msg.analysisResult) {
@@ -273,6 +407,25 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
     runAnalysis(undefined, selectedPresetId || 'stagflation-energy');
   };
 
+  const handleExportChat = useCallback(
+    (format: 'markdown' | 'json') => {
+      if (messages.length === 0) return;
+      try {
+        const filename = downloadChatHistory(messages, entityA, entityB, format);
+        setIsExportMenuOpen(false);
+        setDownloadSuccessToast(
+          `Exported ${format === 'markdown' ? 'Markdown (.md)' : 'JSON (.json)'}: ${filename}`
+        );
+        setTimeout(() => {
+          setDownloadSuccessToast(null);
+        }, 4000);
+      } catch (err) {
+        console.error('Failed to export chat history:', err);
+      }
+    },
+    [messages, entityA, entityB]
+  );
+
   const startSpeechForMessage = useCallback(
     (msg: CopilotChatMessage) => {
       const result = msg.analysisResult;
@@ -286,9 +439,10 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
         keyMechanisms: result?.keyTransmissionMechanisms,
         policyRecommendations: result?.policyRecommendations,
         rate: speechRate,
+        preferredLang: currentLanguage.speechCode,
       });
     },
-    [entityA.name, entityB.name, playAnalysis, speechRate]
+    [entityA.name, entityB.name, playAnalysis, speechRate, currentLanguage.speechCode]
   );
 
   const handleToggleSpeech = useCallback(
@@ -427,6 +581,13 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
         </div>
       </div>
 
+      {/* Automated Economic Risk Monitor & Fiscal Red Flag Dashboard */}
+      <EconomicRiskMonitor
+        entityA={entityA}
+        entityB={entityB}
+        onLaunchStressTestPrompt={handleLaunchPromptFromRiskMonitor}
+      />
+
       {/* Preset Crisis Stress-Test Rail */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -440,15 +601,82 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
             </p>
           </div>
 
-          {messages.length > 0 && (
-            <button
-              onClick={handleClearChat}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Discussion</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2 relative" ref={exportDropdownRef}>
+            {/* Download Chat History Dropdown Button */}
+            <div className="relative">
+              <button
+                type="button"
+                id="download-chat-history-btn"
+                onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                disabled={messages.length === 0}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed group"
+                title={messages.length === 0 ? 'No chat messages to download yet' : 'Download Chat History & Analysis (Markdown or JSON)'}
+              >
+                <Download className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
+                <span>Download Chat History</span>
+                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* Export Format Dropdown Menu */}
+              {isExportMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl p-2 z-40 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-800 mb-1">
+                    Export Chat & Analysis History
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleExportChat('markdown')}
+                    className="w-full text-left p-2.5 rounded-lg hover:bg-indigo-50/70 dark:hover:bg-indigo-950/50 transition-colors flex items-start gap-2.5 cursor-pointer group"
+                  >
+                    <div className="p-1.5 rounded-md bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/80 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5 group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>Markdown Dossier</span>
+                        <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-semibold">.md</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        Formatted briefing dossier with executive thesis, transmission mechanisms, policy recommendations, and sentiment scores.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleExportChat('json')}
+                    className="w-full text-left p-2.5 rounded-lg hover:bg-emerald-50/70 dark:hover:bg-emerald-950/50 transition-colors flex items-start gap-2.5 cursor-pointer group"
+                  >
+                    <div className="p-1.5 rounded-md bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/80 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900">
+                      <FileJson className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>Structured JSON</span>
+                        <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-semibold">.json</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        Machine-readable export with complete metadata, discussed indicators, confidence score pillars, and raw scenario payloads.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {messages.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearChat}
+                className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1 transition-colors cursor-pointer"
+                title="Reset conversation back to default scenario"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Reset Discussion</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -512,8 +740,66 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
         </div>
       )}
 
+      {/* Download Success Notification Toast */}
+      {downloadSuccessToast && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-2xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="font-semibold">{downloadSuccessToast}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadSuccessToast(null)}
+            className="text-[11px] underline opacity-80 hover:opacity-100 cursor-pointer ml-3 font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Conversational Stream & Intelligence Output */}
       <div className="space-y-6">
+        {/* Stream Session Status & Quick Export Toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-bold text-slate-800 dark:text-slate-200">
+              Copilot Intelligence Stream
+            </span>
+            <span className="text-slate-400">·</span>
+            <span className="text-slate-600 dark:text-slate-400 font-medium">
+              {messages.length} {messages.length === 1 ? 'exchange' : 'exchanges'} in session
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden md:inline">
+              Download History:
+            </span>
+            <button
+              type="button"
+              onClick={() => handleExportChat('markdown')}
+              disabled={messages.length === 0}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-40"
+              title="Download chat history as formatted Markdown (.md)"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Markdown (.md)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleExportChat('json')}
+              disabled={messages.length === 0}
+              className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-40"
+              title="Download chat history as structured JSON (.json)"
+            >
+              <FileJson className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>JSON (.json)</span>
+            </button>
+          </div>
+        </div>
+
         {messages.map((msg) => {
           if (msg.sender === 'user') {
             return (
@@ -657,6 +943,15 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
                     >
                       <Printer className="w-3.5 h-3.5" />
                       <span>Print</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportChat('markdown')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Download complete conversation & intelligence analysis as Markdown (.md)"
+                    >
+                      <Download className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      <span>Export (.md)</span>
                     </button>
                   </div>
                 </div>
@@ -1046,11 +1341,11 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
                   onClick={() => {
                     stopListening();
                     if (customQuery.trim() && !loading) {
-                      runAnalysis();
+                      handleProcessQuery();
                     }
                   }}
                   className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
-                  title="Dừng thu âm và gửi câu hỏi ngay lập tức"
+                  title="Dừng thu âm và gửi hoặc thực thi lệnh ngay lập tức"
                 >
                   <Send className="w-3 h-3" />
                   <span>Dừng & Gửi</span>
@@ -1067,6 +1362,40 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
             </div>
           )}
 
+          {/* Real-time Voice Snapshot Command Detector Banner */}
+          {liveSnapshot && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-indigo-500/10 border border-indigo-300 dark:border-indigo-700/80 text-xs shadow-2xs animate-fadeIn">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-wider shadow-2xs">
+                  <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
+                  <span>Voice Snapshot</span>
+                </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {liveSnapshot.entityA.name} {liveSnapshot.entityA.flag} vs {liveSnapshot.entityB.name} {liveSnapshot.entityB.flag}
+                </span>
+                {liveSnapshot.targetTimeRange && (
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 font-mono text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+                    {liveSnapshot.targetTimeRange === '5y' ? '5 Năm gần nhất' : liveSnapshot.targetTimeRange}
+                  </span>
+                )}
+                <ArrowRight className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                  {getTabDisplayName(liveSnapshot.targetTab).vi}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleExecuteSnapshot(liveSnapshot)}
+                className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-2xs transition-colors flex items-center justify-center gap-1 cursor-pointer shrink-0 self-end sm:self-auto"
+                title="Thực thi lệnh Snapshot: chuyển đổi 2 thực thể và nhảy đến tab ngay"
+              >
+                <Zap className="w-3 h-3 fill-white" />
+                <span>Thực thi Snapshot</span>
+              </button>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <input
               id="copilot-input"
@@ -1076,18 +1405,15 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  if (isListening) {
-                    stopListening();
-                  }
                   if (customQuery.trim() && !loading) {
-                    runAnalysis();
+                    handleProcessQuery();
                   }
                 }
               }}
               placeholder={
                 isListening
-                  ? `Đang lắng nghe... câu hỏi của bạn sẽ tự động điền vào đây theo giọng nói.`
-                  : `Đặt câu hỏi so sánh hoặc nói qua Micro (ví dụ: 'So sánh lạm phát và nợ công từ 2015 đến nay')...`
+                  ? `Đang lắng nghe... Nói lệnh snapshot như 'Compare the last 5 years for Germany vs France'`
+                  : `Hỏi phân tích hoặc nói lệnh Snapshot (ví dụ: 'Compare the last 5 years for Germany vs France')...`
               }
               className={`flex-1 text-xs text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent leading-relaxed transition-all ${
                 isListening
@@ -1125,7 +1451,7 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
                   ? 'Trình duyệt không hỗ trợ Web Speech Recognition API'
                   : isListening
                   ? 'Nhấn để dừng thu âm micro'
-                  : `Đặt câu hỏi qua Micro (Web Speech API - ${speechInputLang === 'vi-VN' ? 'Tiếng Việt' : 'English'})`
+                  : `Đặt câu hỏi hoặc ra lệnh Snapshot qua Micro (${speechInputLang === 'vi-VN' ? 'Tiếng Việt' : 'English'})`
               }
               aria-label="Voice input with microphone"
             >
@@ -1146,12 +1472,11 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
             <button
               type="button"
               onClick={() => {
-                if (isListening) stopListening();
-                runAnalysis();
+                handleProcessQuery();
               }}
               disabled={loading || !customQuery.trim()}
               className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-40 flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer shrink-0"
-              title="Gửi câu hỏi phân tích"
+              title="Gửi câu hỏi hoặc thực thi lệnh snapshot"
             >
               {loading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1164,10 +1489,44 @@ export function MacroAnalystCopilot({ entityA, entityB }: MacroAnalystCopilotPro
             </button>
           </div>
 
-          {/* Quick Suggestion Chips */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+          {/* Voice Snapshot Natural Language Commands Strip */}
+          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800/80 text-xs space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Sparkles className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                <span>Lệnh Giọng nói Snapshot Mẫu (Voice Snapshot Commands):</span>
+              </span>
+              <span className="text-[10px] text-slate-500 hidden sm:inline">
+                Nói vào micro hoặc bấm trực tiếp để kích hoạt tự động
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {SNAPSHOT_VOICE_EXAMPLES.map((example, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setSpeechInputLang(example.lang);
+                    setCustomQuery(example.text);
+                    handleProcessQuery(example.text);
+                  }}
+                  className="group inline-flex items-center gap-1 text-[11px] text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-300 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 px-2.5 py-1 rounded-lg border border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all cursor-pointer shadow-2xs"
+                  title={`${example.description} (Ngôn ngữ: ${example.lang})`}
+                >
+                  <span className="px-1 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    {example.badge}
+                  </span>
+                  <span className="font-medium">"{example.text}"</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Suggestion Analytical Chips */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs pt-1 border-t border-slate-100 dark:border-slate-800/80">
             <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Quick Inquiries:</span>
-            {QUICK_PROMPT_SUGGESTIONS.slice(0, 4).map((prompt, idx) => (
+            {QUICK_PROMPT_SUGGESTIONS.slice(0, 3).map((prompt, idx) => (
               <button
                 key={idx}
                 type="button"

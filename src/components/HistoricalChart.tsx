@@ -35,6 +35,7 @@ import {
 } from '../data/historicalExtendedData';
 import { useTheme } from '../context/ThemeContext';
 import { downloadHistoricalChartPng } from '../utils/exportChartPng';
+import { TimeRangeSelector } from './TimeRangeSelector';
 
 interface HistoricalChartProps {
   entityA: EconomicEntity;
@@ -51,6 +52,8 @@ export function HistoricalChart({
 }: HistoricalChartProps) {
   const { isDarkMode } = useTheme();
   const [timeRange, setTimeRange] = useState<HistoricalTimeRange>('10y');
+  const [customStartYear, setCustomStartYear] = useState<number>(2012);
+  const [customEndYear, setCustomEndYear] = useState<number>(2024);
   const [metricKey, setMetricKey] = useState<HistoricalMetricKey>('nominalGdp');
   const [hoveredYear, setHoveredYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
@@ -62,8 +65,14 @@ export function HistoricalChart({
   const historyA = useMemo(() => getExtendedHistory(entityA), [entityA]);
   const historyB = useMemo(() => getExtendedHistory(entityB), [entityB]);
 
-  const filteredA = useMemo(() => filterHistoryByRange(historyA, timeRange), [historyA, timeRange]);
-  const filteredB = useMemo(() => filterHistoryByRange(historyB, timeRange), [historyB, timeRange]);
+  const filteredA = useMemo(
+    () => filterHistoryByRange(historyA, timeRange, customStartYear, customEndYear),
+    [historyA, timeRange, customStartYear, customEndYear]
+  );
+  const filteredB = useMemo(
+    () => filterHistoryByRange(historyB, timeRange, customStartYear, customEndYear),
+    [historyB, timeRange, customStartYear, customEndYear]
+  );
 
   const years = useMemo(() => filteredA.map((p) => p.year), [filteredA]);
 
@@ -134,6 +143,10 @@ export function HistoricalChart({
         case 'publicDebtToGdp':
           valA = ptA.publicDebtToGdp;
           valB = ptB.publicDebtToGdp;
+          break;
+        case 'unemploymentRate':
+          valA = ptA.unemploymentRate;
+          valB = ptB.unemploymentRate;
           break;
         case 'growthIndex':
           valA = baseA.nominalGdp > 0 ? (ptA.nominalGdp / baseA.nominalGdp) * 100 : 100;
@@ -320,7 +333,7 @@ export function HistoricalChart({
               <span>Historical Economic Trajectory & Multi-Year Trends</span>
             </h3>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-              {timeRange === '5y' ? '5-Year' : timeRange === '10y' ? '10-Year' : '20-Year'} Horizon
+              {years[0]}–{years[years.length - 1]} ({years.length}Y{timeRange === 'custom' ? ' Custom' : ''})
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -330,47 +343,17 @@ export function HistoricalChart({
 
         {/* Top Controls: Time Horizon & Metric Selector & PNG Download */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-          {/* Time Range Selector */}
-          <div
-            id="time-range-toggle"
-            role="group"
-            aria-label="Time horizon selector"
-            className="inline-flex items-center p-1 bg-slate-200/70 dark:bg-slate-800 rounded-lg border border-slate-300/80 dark:border-slate-700 text-xs shadow-2xs"
-          >
-            <button
-              id="time-range-5y"
-              onClick={() => setTimeRange('5y')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                timeRange === '5y'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              5Y (2020-24)
-            </button>
-            <button
-              id="time-range-10y"
-              onClick={() => setTimeRange('10y')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                timeRange === '10y'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              10Y (2015-24)
-            </button>
-            <button
-              id="time-range-20y"
-              onClick={() => setTimeRange('20y')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                timeRange === '20y'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              20Y (2005-24)
-            </button>
-          </div>
+          {/* Time Range Selector with Custom Range & Era Presets */}
+          <TimeRangeSelector
+            timeRange={timeRange}
+            onTimeRangeChange={setTimeRange}
+            customStartYear={customStartYear}
+            customEndYear={customEndYear}
+            onCustomYearChange={(start, end) => {
+              setCustomStartYear(start);
+              setCustomEndYear(end);
+            }}
+          />
 
           {/* Metric Selector Dropdown */}
           <div className="flex items-center space-x-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
@@ -387,6 +370,7 @@ export function HistoricalChart({
               <option value="gdpPerCapita">GDP Per Capita ($)</option>
               <option value="gdpGrowthRate">Real Growth Rate (%)</option>
               <option value="inflationRate">Inflation Rate (%)</option>
+              <option value="unemploymentRate">Unemployment Rate (%)</option>
               <option value="publicDebtToGdp">Public Debt-to-GDP (%)</option>
               <option value="growthIndex">Indexed Growth (Base 100)</option>
             </select>

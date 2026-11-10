@@ -134,6 +134,8 @@ interface ComparativeBarChartProps {
   entityB: EconomicEntity;
   onSelectEntity?: (entity: EconomicEntity) => void;
   className?: string;
+  activeMetric?: BarChartMetricKey;
+  onMetricChange?: (metric: BarChartMetricKey) => void;
 }
 
 export function ComparativeBarChart({
@@ -141,11 +143,26 @@ export function ComparativeBarChart({
   entityB,
   onSelectEntity,
   className = '',
+  activeMetric,
+  onMetricChange,
 }: ComparativeBarChartProps) {
   const { isDarkMode } = useTheme();
 
   // Metric selector
-  const [metricKey, setMetricKey] = useState<BarChartMetricKey>('nominalGdp');
+  const [metricKey, setMetricKey] = useState<BarChartMetricKey>(activeMetric || 'nominalGdp');
+
+  useEffect(() => {
+    if (activeMetric) {
+      setMetricKey(activeMetric);
+    }
+  }, [activeMetric]);
+
+  const handleMetricChange = (key: BarChartMetricKey) => {
+    setMetricKey(key);
+    if (onMetricChange) {
+      onMetricChange(key);
+    }
+  };
 
   // Cohort preset filter
   const [cohort, setCohort] = useState<CohortPreset>('top10');
@@ -319,7 +336,7 @@ export function ComparativeBarChart({
             <select
               id="bar-chart-metric-select"
               value={metricKey}
-              onChange={(e) => setMetricKey(e.target.value as BarChartMetricKey)}
+              onChange={(e) => handleMetricChange(e.target.value as BarChartMetricKey)}
               className="bg-transparent font-bold text-slate-800 dark:text-slate-200 focus:outline-hidden cursor-pointer"
             >
               {Object.values(BAR_CHART_METRICS).map((m) => (

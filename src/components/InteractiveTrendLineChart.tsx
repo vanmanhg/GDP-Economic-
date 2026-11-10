@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -22,11 +22,14 @@ import {
 } from '../data/historicalExtendedData';
 import { getMilestonesForYear } from '../data/milestonesData';
 import { ECONOMIC_ENTITIES, getEntityById } from '../data/economicData';
+import { TimeRangeSelector } from './TimeRangeSelector';
 
 interface InteractiveTrendLineChartProps {
   entityA: EconomicEntity;
   entityB: EconomicEntity;
   initialMetric?: HistoricalMetricKey;
+  activeMetric?: HistoricalMetricKey;
+  onMetricChange?: (metric: HistoricalMetricKey) => void;
   initialRange?: HistoricalTimeRange;
   className?: string;
 }
@@ -35,13 +38,39 @@ export function InteractiveTrendLineChart({
   entityA,
   entityB,
   initialMetric = 'nominalGdp',
+  activeMetric,
+  onMetricChange,
   initialRange = '10y',
   className = '',
 }: InteractiveTrendLineChartProps) {
   const { isDarkMode } = useTheme();
 
-  const [metricKey, setMetricKey] = useState<HistoricalMetricKey>(initialMetric);
+  const [metricKey, setMetricKey] = useState<HistoricalMetricKey>(activeMetric || initialMetric);
   const [timeRange, setTimeRange] = useState<HistoricalTimeRange>(initialRange);
+  const [customStartYear, setCustomStartYear] = useState<number>(2012);
+  const [customEndYear, setCustomEndYear] = useState<number>(2024);
+
+  // Sync initialRange prop changes (e.g. from voice snapshot commands)
+  useEffect(() => {
+    if (initialRange) {
+      setTimeRange(initialRange);
+    }
+  }, [initialRange]);
+
+  useEffect(() => {
+    if (activeMetric) {
+      setMetricKey(activeMetric);
+    } else if (initialMetric) {
+      setMetricKey(initialMetric);
+    }
+  }, [activeMetric, initialMetric]);
+
+  const handleMetricChange = (key: HistoricalMetricKey) => {
+    setMetricKey(key);
+    if (onMetricChange) {
+      onMetricChange(key);
+    }
+  };
 
   // Optional benchmark entity to overlay (e.g., US or Global Leader)
   const [benchmarkEntityId, setBenchmarkEntityId] = useState<string>('none');
@@ -67,12 +96,18 @@ export function InteractiveTrendLineChart({
     return getExtendedHistory(benchmarkEntity);
   }, [benchmarkEntity]);
 
-  const filteredA = useMemo(() => filterHistoryByRange(historyA, timeRange), [historyA, timeRange]);
-  const filteredB = useMemo(() => filterHistoryByRange(historyB, timeRange), [historyB, timeRange]);
+  const filteredA = useMemo(
+    () => filterHistoryByRange(historyA, timeRange, customStartYear, customEndYear),
+    [historyA, timeRange, customStartYear, customEndYear]
+  );
+  const filteredB = useMemo(
+    () => filterHistoryByRange(historyB, timeRange, customStartYear, customEndYear),
+    [historyB, timeRange, customStartYear, customEndYear]
+  );
   const filteredBench = useMemo(() => {
     if (!historyBenchmark) return null;
-    return filterHistoryByRange(historyBenchmark, timeRange);
-  }, [historyBenchmark, timeRange]);
+    return filterHistoryByRange(historyBenchmark, timeRange, customStartYear, customEndYear);
+  }, [historyBenchmark, timeRange, customStartYear, customEndYear]);
 
   const years = useMemo(() => filteredA.map((p) => p.year), [filteredA]);
 
@@ -111,6 +146,11 @@ export function InteractiveTrendLineChart({
           valA = ptA.inflationRate || 0;
           valB = ptB.inflationRate || 0;
           if (ptBench) valBench = ptBench.inflationRate || 0;
+          break;
+        case 'unemploymentRate':
+          valA = ptA.unemploymentRate || 0;
+          valB = ptB.unemploymentRate || 0;
+          if (ptBench) valBench = ptBench.unemploymentRate || 0;
           break;
         case 'publicDebtToGdp':
           valA = ptA.publicDebtToGdp || 0;
@@ -162,11 +202,44 @@ export function InteractiveTrendLineChart({
     if (metricKey === 'inflationRate') {
       return { minVal: Math.floor(Math.min(min, 0)), maxVal: Math.ceil(Math.max(max, 6)) };
     }
+    if (metricKey === 'unemploymentRate') {
+      return { minVal: 0, maxVal: Math.ceil(Math.max(max, 8) + 1) };
+    }
     if (min === Infinity) return { minVal: 0, maxVal: 100 };
 
     const padding = (max - Math.max(0, min)) * 0.12;
     return { minVal: Math.max(0, min - padding), maxVal: max + padding };
   }, [seriesData, metricKey]);
+
+  // Cumulative Growth & CAGR over selected time horizon
+  const rangeStats = useMemo(() => {
+    if (seriesData.length < 2) return null;
+    const first = seriesData[0];
+    const last = seriesData[seriesData.length - 1];
+    const numYears = Math.max(1, last.year - first.year);
+
+    const cagrA =
+      first.valA > 0 && last.valA > 0
+        ? (Math.pow(last.valA / first.valA, 1 / numYears) - 1) * 100
+        : 0;
+    const cagrB =
+      first.valB > 0 && last.valB > 0
+        ? (Math.pow(last.valB / first.valB, 1 / numYears) - 1) * 100
+        : 0;
+
+    const totalGrowthA = first.valA !== 0 ? ((last.valA - first.valA) / Math.abs(first.valA)) * 100 : 0;
+    const totalGrowthB = first.valB !== 0 ? ((last.valB - first.valB) / Math.abs(first.valB)) * 100 : 0;
+
+    return {
+      first,
+      last,
+      numYears,
+      cagrA,
+      cagrB,
+      totalGrowthA,
+      totalGrowthB,
+    };
+  }, [seriesData]);
 
   // SVG Chart Geometry
   const width = 800;
@@ -280,7 +353,7 @@ export function InteractiveTrendLineChart({
               Biểu đồ Đường Xu hướng & Quỹ đạo Đa năm
             </h3>
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              {timeRange.toUpperCase()} ({years[0]}–{years[years.length - 1]})
+              {years[0]}–{years[years.length - 1]} ({years.length}Y{timeRange === 'custom' ? ' Custom' : ''})
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -290,56 +363,31 @@ export function InteractiveTrendLineChart({
 
         {/* Toolbar Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Time Range Selector */}
-          <div
-            role="group"
-            aria-label="Khung thời gian"
-            className="inline-flex items-center p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 text-xs"
-          >
-            <button
-              onClick={() => setTimeRange('5y')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                timeRange === '5y'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              5 Năm (2020-24)
-            </button>
-            <button
-              onClick={() => setTimeRange('10y')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                timeRange === '10y'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              10 Năm (2015-24)
-            </button>
-            <button
-              onClick={() => setTimeRange('20y')}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                timeRange === '20y'
-                  ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-2xs font-bold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-              }`}
-            >
-              20 Năm (2005-24)
-            </button>
-          </div>
+          {/* Time Range Selector with Custom Range & Historic Eras */}
+          <TimeRangeSelector
+            timeRange={timeRange}
+            onTimeRangeChange={setTimeRange}
+            customStartYear={customStartYear}
+            customEndYear={customEndYear}
+            onCustomYearChange={(start, end) => {
+              setCustomStartYear(start);
+              setCustomEndYear(end);
+            }}
+          />
 
           {/* Indicator Dropdown */}
           <div className="flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
             <span className="text-slate-400 text-2xs font-semibold">Chỉ số:</span>
             <select
               value={metricKey}
-              onChange={(e) => setMetricKey(e.target.value as HistoricalMetricKey)}
+              onChange={(e) => handleMetricChange(e.target.value as HistoricalMetricKey)}
               className="bg-transparent font-bold text-slate-800 dark:text-slate-200 focus:outline-hidden cursor-pointer"
             >
               <option value="nominalGdp">GDP Danh nghĩa ($B)</option>
               <option value="gdpPerCapita">GDP Bình quân ($)</option>
               <option value="gdpGrowthRate">Tốc độ tăng trưởng thực (%)</option>
               <option value="inflationRate">Tỷ lệ lạm phát (%)</option>
+              <option value="unemploymentRate">Tỷ lệ Thất nghiệp (%)</option>
               <option value="publicDebtToGdp">Nợ công / GDP (%)</option>
               <option value="growthIndex">Chỉ số tích lũy (Base 100)</option>
             </select>
@@ -363,6 +411,45 @@ export function InteractiveTrendLineChart({
           </div>
         </div>
       </div>
+
+      {/* Period Horizon Growth & CAGR Summary Bar */}
+      {rangeStats && (
+        <div className="py-2.5 px-3 bg-slate-50/80 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <span className="font-bold text-slate-900 dark:text-white">
+              Tăng trưởng giai đoạn {rangeStats.first.year}–{rangeStats.last.year} ({rangeStats.numYears} năm):
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+            <div className="flex items-center gap-1.5 font-mono">
+              <span className="font-semibold text-indigo-700 dark:text-indigo-400">
+                {entityA.shortName}:
+              </span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {rangeStats.totalGrowthA >= 0 ? '+' : ''}{rangeStats.totalGrowthA.toFixed(1)}%
+              </span>
+              <span className="text-[10px] text-slate-400">
+                (CAGR: {rangeStats.cagrA >= 0 ? '+' : ''}{rangeStats.cagrA.toFixed(1)}%/năm)
+              </span>
+            </div>
+
+            <span className="text-slate-300 dark:text-slate-600">|</span>
+
+            <div className="flex items-center gap-1.5 font-mono">
+              <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                {entityB.shortName}:
+              </span>
+              <span className="font-bold text-slate-900 dark:text-white">
+                {rangeStats.totalGrowthB >= 0 ? '+' : ''}{rangeStats.totalGrowthB.toFixed(1)}%
+              </span>
+              <span className="text-[10px] text-slate-400">
+                (CAGR: {rangeStats.cagrB >= 0 ? '+' : ''}{rangeStats.cagrB.toFixed(1)}%/năm)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Trajectory Scorecards Strip */}
       {activePoint && (
